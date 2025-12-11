@@ -520,42 +520,18 @@ onUnmounted(() => {
                     @backfill:retry-tick="onBackfillRetryTick" @backfill:retry-stop="onBackfillRetryStop"
                     data-test="masonry-component">
                     <template #default="{ item, index, remove }">
-                        <VibeMasonryItem :item="item" :remove="remove">
-                            <template
-                                #default="{ item: slotItem, imageSrc, imageLoaded, imageError, isLoading, showMedia }">
-                                <div class="relative w-full h-full overflow-hidden group"
-                                    @mouseenter="hoveredItemIndex = index" @mouseleave="hoveredItemIndex = null">
-                                    <!-- Render image using MasonryItem's slot props -->
-                                    <img v-if="imageSrc && !imageError" :src="imageSrc" :class="[
-                                        'w-full h-full object-cover transition-opacity duration-700 ease-in-out',
-                                        imageLoaded && showMedia ? 'opacity-100' : 'opacity-0'
-                                    ]" style="position: absolute; top: 0; left: 0;" loading="lazy" decoding="async"
-                                        alt="" />
-                                    <!-- Loading placeholder -->
-                                    <div v-if="!imageLoaded && !imageError && isLoading"
-                                        class="absolute inset-0 bg-slate-100 flex items-center justify-center">
-                                        <div
-                                            class="w-12 h-12 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
-                                            <i class="fas fa-image text-xl text-slate-400"></i>
-                                        </div>
-                                    </div>
-                                    <!-- Error state -->
-                                    <div v-if="imageError"
-                                        class="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-400 text-sm p-4 text-center">
-                                        <i class="fas fa-image text-2xl mb-2 opacity-50"></i>
-                                        <span>Failed to load image</span>
-                                    </div>
-                                    <!-- FileReactions overlay -->
-                                    <div v-show="hoveredItemIndex === index"
-                                        class="absolute bottom-0 left-0 right-0 flex justify-center pb-2 z-50 pointer-events-auto">
-                                        <FileReactions :file-id="slotItem.id" :previewed-count="0" :viewed-count="0"
-                                            :current-index="index" :total-items="items.length" variant="small"
-                                            :remove-item="() => remove(slotItem)"
-                                            @reaction="(type) => handleMasonryReaction(slotItem.id, type, remove)" />
-                                    </div>
-                                </div>
-                            </template>
-                        </VibeMasonryItem>
+                        <div class="relative w-full h-full" @mouseenter="hoveredItemIndex = index"
+                            @mouseleave="hoveredItemIndex = null">
+                            <VibeMasonryItem :item="item" :remove="remove" />
+                            <!-- FileReactions overlay -->
+                            <div v-show="hoveredItemIndex === index"
+                                class="absolute bottom-0 left-0 right-0 flex justify-center pb-2 z-50 pointer-events-auto">
+                                <FileReactions :file-id="item.id" :previewed-count="0" :viewed-count="0"
+                                    :current-index="index" :total-items="items.length" variant="small"
+                                    :remove-item="() => remove(item)"
+                                    @reaction="(type) => handleMasonryReaction(item.id, type, remove)" />
+                            </div>
+                        </div>
                     </template>
                 </Masonry>
             </div>

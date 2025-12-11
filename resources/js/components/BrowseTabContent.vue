@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { Masonry } from '@wyxos/vibe';
+import { Masonry, MasonryItem as VibeMasonryItem } from '@wyxos/vibe';
 import { Loader2 } from 'lucide-vue-next';
 import FileViewer from './FileViewer.vue';
 import BrowseStatusBar from './BrowseStatusBar.vue';
@@ -44,8 +44,6 @@ const isTabRestored = ref(false);
 const pendingRestoreNextCursor = ref<string | number | null>(null);
 const selectedService = ref<string>('');
 const hoveredItemIndex = ref<number | null>(null);
-// Store remove function from masonry slot to use in FileViewer
-const masonryRemoveFn = ref<((item: MasonryItem) => void) | null>(null);
 
 // Container refs for FileViewer
 const masonryContainer = ref<HTMLElement | null>(null);
@@ -147,7 +145,7 @@ function handleAltClickOnMasonry(e: MouseEvent): void {
         if (imgEl) {
             const src = imgEl.currentSrc || imgEl.getAttribute('src') || '';
             const item = items.value.find(i => {
-                const itemSrc = (i.src || i.thumbnail || '').split('?')[0].split('#')[0];
+                const itemSrc = (i.src || '').split('?')[0].split('#')[0];
                 const baseSrc = src.split('?')[0].split('#')[0];
                 return baseSrc === itemSrc || baseSrc.includes(itemSrc) || itemSrc.includes(baseSrc);
             });
@@ -187,24 +185,17 @@ function handleAltClickReaction(e: MouseEvent, fileId: number): void {
     if (reactionType) {
         const item = items.value.find((i) => i.id === fileId);
         if (item) {
-            // Find the remove function from masonry slot
-            const removeFn = masonryRemoveFn.value || ((itemToRemove: MasonryItem) => {
+            // Create remove function that uses masonry instance
+            const removeFn = (itemToRemove: MasonryItem) => {
                 if (masonry.value) {
                     const masonryItem = items.value.find((i) => i.id === itemToRemove.id);
                     if (masonryItem) {
                         masonry.value.remove(masonryItem);
                     }
                 }
-            });
+            };
             handleMasonryReaction(fileId, reactionType, removeFn);
         }
-    }
-}
-
-// Function to capture remove function from masonry slot
-function captureRemoveFn(remove: (item: MasonryItem) => void): void {
-    if (!masonryRemoveFn.value) {
-        masonryRemoveFn.value = remove;
     }
 }
 
@@ -529,20 +520,42 @@ onUnmounted(() => {
                     @backfill:retry-tick="onBackfillRetryTick" @backfill:retry-stop="onBackfillRetryStop"
                     data-test="masonry-component">
                     <template #default="{ item, index, remove }">
-                        <!-- Capture remove function on first item render -->
-                        <div v-if="index === 0" style="display: none;" :ref="() => captureRemoveFn(remove)" />
-                        <div class="relative w-full h-full overflow-hidden group masonry-item" :data-item-id="item.id"
-                            @mouseenter="hoveredItemIndex = index" @mouseleave="hoveredItemIndex = null">
-                            <img :src="item.src || item.thumbnail || ''" :alt="`Item ${item.id}`"
-                                class="w-full h-full object-cover" />
-                            <div v-show="hoveredItemIndex === index"
-                                class="absolute bottom-0 left-0 right-0 flex justify-center pb-2 z-50 pointer-events-auto">
-                                <FileReactions :file-id="item.id" :previewed-count="0" :viewed-count="0"
-                                    :current-index="index" :total-items="items.length" variant="small"
-                                    :remove-item="() => remove(item)"
-                                    @reaction="(type) => handleMasonryReaction(item.id, type, remove)" />
-                            </div>
-                        </div>
+                        <VibeMasonryItem :item="item" :remove="remove">
+                            <template
+                                #default="{ item: slotItem, imageSrc, imageLoaded, imageError, isLoading, showMedia }">
+                                <div class="relative w-full h-full overflow-hidden group"
+                                    @mouseenter="hoveredItemIndex = index" @mouseleave="hoveredItemIndex = null">
+                                    <!-- Render image using MasonryItem's slot props -->
+                                    <img v-if="imageSrc && !imageError" :src="imageSrc" :class="[
+                                        'w-full h-full object-cover transition-opacity duration-700 ease-in-out',
+                                        imageLoaded && showMedia ? 'opacity-100' : 'opacity-0'
+                                    ]" style="position: absolute; top: 0; left: 0;" loading="lazy" decoding="async"
+                                        alt="" />
+                                    <!-- Loading placeholder -->
+                                    <div v-if="!imageLoaded && !imageError && isLoading"
+                                        class="absolute inset-0 bg-slate-100 flex items-center justify-center">
+                                        <div
+                                            class="w-12 h-12 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                                            <i class="fas fa-image text-xl text-slate-400"></i>
+                                        </div>
+                                    </div>
+                                    <!-- Error state -->
+                                    <div v-if="imageError"
+                                        class="absolute inset-0 flex flex-col items-center justify-center bg-slate-50 text-slate-400 text-sm p-4 text-center">
+                                        <i class="fas fa-image text-2xl mb-2 opacity-50"></i>
+                                        <span>Failed to load image</span>
+                                    </div>
+                                    <!-- FileReactions overlay -->
+                                    <div v-show="hoveredItemIndex === index"
+                                        class="absolute bottom-0 left-0 right-0 flex justify-center pb-2 z-50 pointer-events-auto">
+                                        <FileReactions :file-id="slotItem.id" :previewed-count="0" :viewed-count="0"
+                                            :current-index="index" :total-items="items.length" variant="small"
+                                            :remove-item="() => remove(slotItem)"
+                                            @reaction="(type) => handleMasonryReaction(slotItem.id, type, remove)" />
+                                    </div>
+                                </div>
+                            </template>
+                        </VibeMasonryItem>
                     </template>
                 </Masonry>
             </div>
@@ -559,13 +572,8 @@ onUnmounted(() => {
         <FileViewer ref="fileViewer" :container-ref="tabContentContainer" :masonry-container-ref="masonryContainer"
             :items="items" :has-more="nextCursor !== null" :is-loading="masonry?.isLoading ?? false"
             :on-load-more="handleCarouselLoadMore" :on-reaction="props.onReaction" :remove-from-masonry="(item) => {
-                // Use the remove function directly from masonry slot if available
-                // In template, Vue auto-unwraps refs, so masonryRemoveFn is the value
-                if (masonryRemoveFn) {
-                    masonryRemoveFn(item);
-                    // masonryRemoveFn handles removal via v-model, so items array is updated automatically
-                } else if (masonry.value) {
-                    // Fallback: find item and use masonry instance method
+                // Use masonry instance method to remove item
+                if (masonry.value) {
                     const masonryItem = items.find((i) => i.id === item.id);
                     if (masonryItem) {
                         masonry.value.remove(masonryItem);
